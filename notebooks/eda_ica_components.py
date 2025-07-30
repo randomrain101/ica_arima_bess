@@ -32,11 +32,11 @@ df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'day_ahea
 #%%
 
 # 2 year rolling window
-window = 356
+window = 400
 df_pred = pd.DataFrame(columns=df.columns)
 ica_list = []
 
-i = int(356 * 5)
+i = int(356 * 1)
 
 df_window = df.iloc[i:i + window]
 
@@ -178,3 +178,11 @@ for i, (comp, ent) in enumerate(entropies):
     print(f"{i+1:2d}. {comp}: {ent:.4f}")
 
 #%%
+# interpretable components
+# e.g. year 2020, a components loadings weight for (peak) daytime usage
+# the price curve for the component over the year shows a strong seasonal pattern:
+# cheap in the summer (more sunlight, no heating, more solar), expensive in the winter (more heating, more lighting, less solar)
+
+# another could be industry usage (working hours), between the peaks of people waking up and going to bed (e.g. 9 to 5 workday)
+# could have weekly patterns, e.g. cheaper on weekends
+# industry demand could mbe influenced by holidays, economic cycles that induce autocorrelation
