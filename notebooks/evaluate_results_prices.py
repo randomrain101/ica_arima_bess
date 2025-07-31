@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from scipy.stats import spearmanr
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 
@@ -55,6 +56,9 @@ def calculate_price_metrics(actual, predicted, model_name):
     smape = np.mean(2 * np.abs(actual_clean - predicted_clean) / 
                    (np.abs(actual_clean) + np.abs(predicted_clean) + epsilon)) * 100
     
+    # Spearman rank correlation coefficient
+    spearman_corr, _ = spearmanr(actual_clean, predicted_clean)
+    
     return {
         'Model': model_name,
         'MAE': mae,
@@ -62,6 +66,7 @@ def calculate_price_metrics(actual, predicted, model_name):
         'rMAE': rmae,
         'MAPE': mape,
         'sMAPE': smape,
+        'Spearman': spearman_corr,
         'N_Observations': len(actual_clean)
     }
 
@@ -112,7 +117,7 @@ quarterly_df = pd.DataFrame(quarterly_metrics)
 print("\nQuarterly Price Prediction Performance:")
 print("=" * 60)
 quarterly_pivot = quarterly_df.pivot_table(index='Quarter', columns='Model', 
-                                         values=['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE'])
+                                         values=['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE', 'Spearman'])
 print(quarterly_pivot.round(4))
 
 #%%
@@ -120,7 +125,7 @@ print(quarterly_pivot.round(4))
 fig, axes = plt.subplots(2, 3, figsize=(18, 10))
 axes = axes.flatten()
 
-metrics_to_plot = ['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE']
+metrics_to_plot = ['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE', 'Spearman']
 for i, metric in enumerate(metrics_to_plot):
     ax = axes[i]
     
@@ -179,7 +184,8 @@ def calculate_hourly_price_metrics(actual_df, predicted_df, model_name):
             'RMSE': rmse,
             'rMAE': rmae,
             'MAPE': mape,
-            'sMAPE': smape
+            'sMAPE': smape,
+            'Spearman': spearmanr(actual_hour_clean, predicted_hour_clean)[0]
         })
     
     return hourly_results
@@ -196,7 +202,7 @@ hourly_df = pd.DataFrame(hourly_metrics)
 fig, axes = plt.subplots(2, 3, figsize=(18, 10))
 axes = axes.flatten()
 
-for i, metric in enumerate(['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE']):
+for i, metric in enumerate(['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE', 'Spearman']):
     ax = axes[i]
     
     for model in ['ICA', 'PCA', 'Naive']:
@@ -219,7 +225,7 @@ plt.show()
 fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 
 # Bar chart comparison
-metrics_names = ['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE']
+metrics_names = ['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE', 'Spearman']
 ica_values = [metrics_df[metrics_df['Model'] == 'ICA'][metric].iloc[0] for metric in metrics_names]
 pca_values = [metrics_df[metrics_df['Model'] == 'PCA'][metric].iloc[0] for metric in metrics_names]
 naive_values = [metrics_df[metrics_df['Model'] == 'Naive'][metric].iloc[0] for metric in metrics_names]

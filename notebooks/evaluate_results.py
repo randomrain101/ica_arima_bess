@@ -11,6 +11,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, r2_score, cohen_kappa_score, root_mean_squared_error, median_absolute_error, explained_variance_score
 from pmdarima.arima import auto_arima
 from joblib import Parallel, delayed
+from scipy.stats import spearmanr
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 
@@ -76,6 +77,10 @@ print(f"RMSE: {rmse:.4f}")
 mae = median_absolute_error(actual_clean, predicted_clean)
 print(f"Median Absolute Error: {mae:.4f}")
 
+# Calculate Spearman rank correlation coefficient
+spearman_corr, _ = spearmanr(actual_clean, predicted_clean)
+print(f"Spearman Correlation: {spearman_corr:.4f}")
+
 # Calculate metrics for naive predictions
 naive_returns_flat = naive_predicted_returns.values.flatten()
 naive_mask = ~(np.isnan(naive_returns_flat) | np.isnan(actual_returns_flat))
@@ -87,6 +92,7 @@ r2_naive = r2_score(actual_clean_naive, naive_clean)
 mae_naive = np.mean(np.abs(naive_clean - actual_clean_naive))
 rmse_naive = root_mean_squared_error(actual_clean_naive, naive_clean)
 medae_naive = median_absolute_error(actual_clean_naive, naive_clean)
+spearman_naive, _ = spearmanr(actual_clean_naive, naive_clean)
 
 naive_direction = np.sign(naive_clean)
 actual_direction_naive = np.sign(actual_clean_naive)
@@ -107,6 +113,7 @@ r2_pca = r2_score(actual_clean_pca, pca_clean)
 mae_pca = np.mean(np.abs(pca_clean - actual_clean_pca))
 rmse_pca = root_mean_squared_error(actual_clean_pca, pca_clean)
 medae_pca = median_absolute_error(actual_clean_pca, pca_clean)
+spearman_pca, _ = spearmanr(actual_clean_pca, pca_clean)
 
 pca_direction = np.sign(pca_clean)
 actual_direction_pca = np.sign(actual_clean_pca)
@@ -121,13 +128,13 @@ print("\n" + "="*75)
 print("MODEL vs PCA vs NAIVE COMPARISON")
 print("="*75)
 comparison_metrics = pd.DataFrame({
-    'ICA Model': [r2, mae_returns, rmse, mae, accuracy, kappa, hit_rate],
-    'PCA Model': [r2_pca, mae_pca, rmse_pca, medae_pca, accuracy_pca, kappa_pca, hit_rate_pca],
-    'Naive': [r2_naive, mae_naive, rmse_naive, medae_naive, accuracy_naive, kappa_naive, hit_rate_naive],
-}, index=['R²', 'MAE', 'RMSE', 'Median AE', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate'])
+    'ICA Model': [r2, mae_returns, rmse, mae, accuracy, kappa, hit_rate, spearman_corr],
+    'PCA Model': [r2_pca, mae_pca, rmse_pca, medae_pca, accuracy_pca, kappa_pca, hit_rate_pca, spearman_pca],
+    'Naive': [r2_naive, mae_naive, rmse_naive, medae_naive, accuracy_naive, kappa_naive, hit_rate_naive, spearman_naive],
+}, index=['R²', 'MAE', 'RMSE', 'Median AE', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate', 'Spearman Corr'])
 
 # Define which metrics are "higher is better" vs "lower is better"
-higher_is_better = ['R²', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate']
+higher_is_better = ['R²', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate', 'Spearman Corr']
 lower_is_better = ['MAE', 'RMSE', 'Median AE']
 
 # Calculate improvements
@@ -182,6 +189,7 @@ def calculate_quarterly_metrics(predicted_df, actual_df, label):
         r2_q = r2_score(actual_clean, pred_clean)
         mae_q = np.mean(np.abs(pred_clean - actual_clean))
         rmse_q = root_mean_squared_error(actual_clean, pred_clean)
+        spearman_q, _ = spearmanr(actual_clean, pred_clean)
         
         pred_dir = np.sign(pred_clean)
         actual_dir = np.sign(actual_clean)
@@ -194,6 +202,7 @@ def calculate_quarterly_metrics(predicted_df, actual_df, label):
             'MAE': mae_q,
             'RMSE': rmse_q,
             'Direction_Accuracy': accuracy_q,
+            'Spearman': spearman_q,
             'N_Observations': len(pred_clean)
         })
     
@@ -208,15 +217,16 @@ quarterly_metrics.extend(calculate_quarterly_metrics(naive_predicted_returns, df
 quarterly_df = pd.DataFrame(quarterly_metrics)
 
 print("\nQuarterly Performance:")
-print(quarterly_df.pivot_table(index='Quarter', columns='Model', values=['R²', 'MAE', 'Direction_Accuracy']).round(4))
+print(quarterly_df.pivot_table(index='Quarter', columns='Model', values=['R²', 'MAE', 'Direction_Accuracy', 'Spearman']).round(4))
 
 #%%
 # Plot quarterly progression
-fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+axes = axes.flatten()
 
-metrics_to_plot = ['R²', 'MAE', 'RMSE', 'Direction_Accuracy']
+metrics_to_plot = ['R²', 'MAE', 'RMSE', 'Direction_Accuracy', 'Spearman']
 for i, metric in enumerate(metrics_to_plot):
-    ax = axes[i//2, i%2]
+    ax = axes[i]
     
     for model in ['ICA', 'PCA', 'Naive']:
         model_data = quarterly_df[quarterly_df['Model'] == model]
@@ -228,6 +238,9 @@ for i, metric in enumerate(metrics_to_plot):
     ax.legend()
     ax.grid(True, alpha=0.3)
     ax.tick_params(axis='x', rotation=45)
+
+# Hide the last subplot if not used
+axes[-1].set_visible(False)
 
 plt.tight_layout()
 plt.show()
@@ -248,10 +261,10 @@ axes[0,0].legend()
 axes[0,0].grid(True)
 
 # Bar chart of key metrics
-metrics_names = ['R²', 'MAE', 'Direction Accuracy']
-ica_values = [r2, mae_returns, accuracy]
-pca_values = [r2_pca, mae_pca, accuracy_pca]
-naive_values = [r2_naive, mae_naive, accuracy_naive]
+metrics_names = ['R²', 'MAE', 'Direction Accuracy', 'Spearman Corr']
+ica_values = [r2, mae_returns, accuracy, spearman_corr]
+pca_values = [r2_pca, mae_pca, accuracy_pca, spearman_pca]
+naive_values = [r2_naive, mae_naive, accuracy_naive, spearman_naive]
 
 x = np.arange(len(metrics_names))
 width = 0.25
