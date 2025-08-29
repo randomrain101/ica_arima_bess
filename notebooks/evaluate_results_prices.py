@@ -8,6 +8,8 @@ from tqdm import tqdm
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from scipy.stats import spearmanr
 import warnings
+from mpl_toolkits.mplot3d import Axes3D
+from plotly.subplots import make_subplots
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 #%%
