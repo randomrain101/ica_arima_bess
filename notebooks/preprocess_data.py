@@ -79,5 +79,5 @@ plt.ylabel('Date')
 plt.tight_layout()
 plt.show()
 
-df.to_csv(os.path.join(data_path, 'day_ahead_prices.csv'))
+df.to_csv(os.path.join(data_path, 'id3_prices.csv'))
 

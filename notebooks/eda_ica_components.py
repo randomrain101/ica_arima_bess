@@ -27,7 +27,7 @@ import datetime
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 #%%
-df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'day_ahead_prices.csv'), index_col=0, parse_dates=True)
+df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
 
 #%%
 

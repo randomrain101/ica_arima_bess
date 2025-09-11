@@ -13,13 +13,13 @@ from plotly.subplots import make_subplots
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 #%%
-df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'day_ahead_prices.csv'), index_col=0, parse_dates=True)
+df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
 df_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'predictions.csv'), index_col=0, parse_dates=True)
 df_pca_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'pca_predictions.csv'), index_col=0, parse_dates=True)
 
 #%%
 # Align data - get common indices
-common_index = df.index.intersection(df_results.index).intersection(df_pca_results.index)
+common_index = df.index.intersection(df_pca_results.index).intersection(df_results.index)
 df_actual = df.loc[common_index]
 df_ica_pred = df_results.loc[common_index]
 df_pca_pred = df_pca_results.loc[common_index]

@@ -22,7 +22,7 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 #%%
-df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'day_ahead_prices.csv'), index_col=0, parse_dates=True)
+df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
 
 # Calculate price differences
 df_price_diff = df.diff().dropna()
@@ -67,7 +67,6 @@ results = Parallel(n_jobs=-1)(delayed(process_window)(i, df_price_diff, window)
 
 #%%
 df_results = pd.concat(results, axis=0)
-data_path = os.path.join(os.path.dirname(__file__), '..', 'data')
-df_results.to_csv(os.path.join(data_path, 'pca_predictions.csv'))
+df_results.to_csv("../data/pca_predictions.csv")
 
 #%%

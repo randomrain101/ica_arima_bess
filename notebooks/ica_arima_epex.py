@@ -23,10 +23,9 @@ import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 #%%
-df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'day_ahead_prices.csv'), index_col=0, parse_dates=True)
+df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
 
 #%%
-
 # 2 year rolling window
 window = 356
 df_pred = pd.DataFrame(columns=df.columns)
@@ -50,11 +49,14 @@ def process_window(i, df, window):
 
     pred_values = sc.inverse_transform(ica.inverse_transform(df_pred_ica))
     print("finished window", i, "of", len(df) - window)
-    return pd.DataFrame(pred_values, index=df_pred_ica.index)
+    return pd.DataFrame(pred_values, index=[df_window.index[-1] + pd.Timedelta(days=1)])
 
 results = Parallel(n_jobs=-1)(delayed(process_window)(i, df, window) for i in tqdm(range(len(df) - window)))
 
 #%%
 df_results = pd.concat(results, axis=0)
-df_results.to_csv(os.path.join(data_path, 'predictions.csv'))
+#df_results.index = pd.date_range(start=df_results.index[0], end=df_results.index[-1], freq='D')
+#df_results.index = pd.DatetimeIndex(df_results.index)
+df_results.to_csv("../data/predictions.csv")
 
+#%%
