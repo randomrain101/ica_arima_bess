@@ -70,7 +70,7 @@ fig.show()
 # Create additional interactive comparison plot
 fig_comp = make_subplots(
     rows=1, cols=2,
-    subplot_titles=('ICA Predictions', 'PCA Predictions'),
+    subplot_titles=('ICA Predictions', 'Actual Prices'),
     specs=[[{'type': 'surface'}, {'type': 'surface'}]]
 )
 
@@ -82,7 +82,7 @@ fig_comp.add_trace(
 
 # Add PCA surface
 fig_comp.add_trace(
-    go.Surface(z=df_pca_results.T.values, x=days, y=hours, colorscale='plasma', name='PCA'),
+    go.Surface(z=df_actual.T.values, x=days, y=hours, colorscale='plasma', name='PCA'),
     row=1, col=2
 )
 
