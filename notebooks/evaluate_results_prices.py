@@ -16,13 +16,15 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
 df_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'predictions.csv'), index_col=0, parse_dates=True)
 df_pca_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'pca_predictions.csv'), index_col=0, parse_dates=True)
+df_arima_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'arima_predictions.csv'), index_col=0, parse_dates=True)
 
 #%%
 # Align data - get common indices
-common_index = df.index.intersection(df_pca_results.index).intersection(df_results.index)
+common_index = df.index.intersection(df_pca_results.index).intersection(df_results.index).intersection(df_arima_results.index)
 df_actual = df.loc[common_index]
 df_ica_pred = df_results.loc[common_index]
 df_pca_pred = df_pca_results.loc[common_index]
+df_arima_pred = df_arima_results.loc[common_index]
 
 # Naive prediction (previous day's prices)
 df_naive_pred = df_actual.shift(1).dropna()
@@ -76,6 +78,7 @@ def calculate_price_metrics(actual, predicted, model_name):
 metrics_list = []
 metrics_list.append(calculate_price_metrics(df_actual, df_ica_pred, 'ICA'))
 metrics_list.append(calculate_price_metrics(df_actual, df_pca_pred, 'PCA'))
+metrics_list.append(calculate_price_metrics(df_actual, df_arima_pred, 'ARIMA'))
 metrics_list.append(calculate_price_metrics(df_actual_naive, df_naive_pred, 'Naive'))
 
 metrics_df = pd.DataFrame(metrics_list)
@@ -112,6 +115,7 @@ def calculate_quarterly_price_metrics(actual_df, predicted_df, model_name):
 quarterly_metrics = []
 quarterly_metrics.extend(calculate_quarterly_price_metrics(df_actual, df_ica_pred, 'ICA'))
 quarterly_metrics.extend(calculate_quarterly_price_metrics(df_actual, df_pca_pred, 'PCA'))
+quarterly_metrics.extend(calculate_quarterly_price_metrics(df_actual, df_arima_pred, 'ARIMA'))
 quarterly_metrics.extend(calculate_quarterly_price_metrics(df_actual_naive, df_naive_pred, 'Naive'))
 
 quarterly_df = pd.DataFrame(quarterly_metrics)
@@ -131,7 +135,7 @@ metrics_to_plot = ['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE', 'Spearman']
 for i, metric in enumerate(metrics_to_plot):
     ax = axes[i]
     
-    for model in ['ICA', 'PCA', 'Naive']:
+    for model in ['ICA', 'PCA', 'ARIMA', 'Naive']:
         model_data = quarterly_df[quarterly_df['Model'] == model]
         if len(model_data) > 0:
             ax.plot(model_data['Quarter'], model_data[metric], marker='o', label=model, linewidth=2)
@@ -196,6 +200,7 @@ def calculate_hourly_price_metrics(actual_df, predicted_df, model_name):
 hourly_metrics = []
 hourly_metrics.extend(calculate_hourly_price_metrics(df_actual, df_ica_pred, 'ICA'))
 hourly_metrics.extend(calculate_hourly_price_metrics(df_actual, df_pca_pred, 'PCA'))
+hourly_metrics.extend(calculate_hourly_price_metrics(df_actual, df_arima_pred, 'ARIMA'))
 hourly_metrics.extend(calculate_hourly_price_metrics(df_actual_naive, df_naive_pred, 'Naive'))
 
 hourly_df = pd.DataFrame(hourly_metrics)
@@ -207,7 +212,7 @@ axes = axes.flatten()
 for i, metric in enumerate(['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE', 'Spearman']):
     ax = axes[i]
     
-    for model in ['ICA', 'PCA', 'Naive']:
+    for model in ['ICA', 'PCA', 'ARIMA', 'Naive']:
         model_data = hourly_df[hourly_df['Model'] == model]
         ax.plot(model_data['Hour'], model_data[metric], marker='o', label=model, linewidth=2)
     
@@ -230,14 +235,16 @@ fig, axes = plt.subplots(1, 3, figsize=(18, 6))
 metrics_names = ['MAE', 'RMSE', 'rMAE', 'MAPE', 'sMAPE', 'Spearman']
 ica_values = [metrics_df[metrics_df['Model'] == 'ICA'][metric].iloc[0] for metric in metrics_names]
 pca_values = [metrics_df[metrics_df['Model'] == 'PCA'][metric].iloc[0] for metric in metrics_names]
+arima_values = [metrics_df[metrics_df['Model'] == 'ARIMA'][metric].iloc[0] for metric in metrics_names]
 naive_values = [metrics_df[metrics_df['Model'] == 'Naive'][metric].iloc[0] for metric in metrics_names]
 
 x = np.arange(len(metrics_names))
-width = 0.25
+width = 0.2
 
-axes[0].bar(x - width, ica_values, width, label='ICA', alpha=0.8)
-axes[0].bar(x, pca_values, width, label='PCA', alpha=0.8)
-axes[0].bar(x + width, naive_values, width, label='Naive', alpha=0.8)
+axes[0].bar(x - width*1.5, ica_values, width, label='ICA', alpha=0.8)
+axes[0].bar(x - width/2, pca_values, width, label='PCA', alpha=0.8)
+axes[0].bar(x + width/2, arima_values, width, label='ARIMA', alpha=0.8)
+axes[0].bar(x + width*1.5, naive_values, width, label='Naive', alpha=0.8)
 axes[0].set_xlabel('Metrics')
 axes[0].set_ylabel('Value')
 axes[0].set_title('Price Prediction Metrics Comparison')
@@ -251,9 +258,11 @@ sample_size = min(1000, len(df_actual.values.flatten()))
 actual_sample = df_actual.values.flatten()[:sample_size]
 ica_sample = df_ica_pred.values.flatten()[:sample_size]
 pca_sample = df_pca_pred.values.flatten()[:sample_size]
+arima_sample = df_arima_pred.values.flatten()[:sample_size]
 
 axes[1].scatter(actual_sample, ica_sample, alpha=0.5, s=10, label='ICA')
 axes[1].scatter(actual_sample, pca_sample, alpha=0.5, s=10, label='PCA')
+axes[1].scatter(actual_sample, arima_sample, alpha=0.5, s=10, label='ARIMA')
 min_val, max_val = min(actual_sample), max(actual_sample)
 axes[1].plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8)
 axes[1].set_xlabel('Actual Prices')
@@ -266,19 +275,23 @@ axes[1].grid(True, alpha=0.3)
 improvement_metrics = ['MAE', 'RMSE', 'MAPE', 'sMAPE']
 ica_improvements = []
 pca_improvements = []
+arima_improvements = []
 
 for metric in improvement_metrics:
     naive_val = metrics_df[metrics_df['Model'] == 'Naive'][metric].iloc[0]
     ica_val = metrics_df[metrics_df['Model'] == 'ICA'][metric].iloc[0]
     pca_val = metrics_df[metrics_df['Model'] == 'PCA'][metric].iloc[0]
+    arima_val = metrics_df[metrics_df['Model'] == 'ARIMA'][metric].iloc[0]
     
     # For these metrics, lower is better, so improvement = (naive - model) / naive * 100
     ica_improvements.append((naive_val - ica_val) / naive_val * 100)
     pca_improvements.append((naive_val - pca_val) / naive_val * 100)
+    arima_improvements.append((naive_val - arima_val) / naive_val * 100)
 
 x_imp = np.arange(len(improvement_metrics))
-axes[2].bar(x_imp - width/2, ica_improvements, width, label='ICA vs Naive', alpha=0.8)
-axes[2].bar(x_imp + width/2, pca_improvements, width, label='PCA vs Naive', alpha=0.8)
+axes[2].bar(x_imp - width, ica_improvements, width, label='ICA vs Naive', alpha=0.8)
+axes[2].bar(x_imp, pca_improvements, width, label='PCA vs Naive', alpha=0.8)
+axes[2].bar(x_imp + width, arima_improvements, width, label='ARIMA vs Naive', alpha=0.8)
 axes[2].axhline(y=0, color='red', linestyle='--', alpha=0.7)
 axes[2].set_xlabel('Metrics')
 axes[2].set_ylabel('Improvement (%)')

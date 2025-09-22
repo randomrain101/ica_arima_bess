@@ -27,12 +27,17 @@ df_pca_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data
 df_pca_results = df_pca_results.values.repeat(4, axis=1)
 df_pca_results = pd.DataFrame(df_pca_results).iloc[1:]
 
+df_arima_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'arima_predictions.csv'), index_col=0, parse_dates=True)
+df_arima_results = df_arima_results.values.repeat(4, axis=1)
+df_arima_results = pd.DataFrame(df_arima_results).iloc[1:]
+
 df_naive = df.shift(1).dropna()
 
-intersect_index = df.index.intersection(df_results.index).intersection(df_pca_results.index).intersection(df_naive.index)
+intersect_index = df.index.intersection(df_results.index).intersection(df_pca_results.index).intersection(df_arima_results.index).intersection(df_naive.index)
 df = df.loc[intersect_index].set_index(index[intersect_index])
 df_results = df_results.loc[intersect_index].set_index(index[intersect_index])
 df_pca_results = df_pca_results.loc[intersect_index].set_index(index[intersect_index])
+df_arima_results = df_arima_results.loc[intersect_index].set_index(index[intersect_index])
 df_naive = df_naive.loc[intersect_index].set_index(index[intersect_index])
 
 #%%
@@ -56,13 +61,17 @@ def optimize_one_day(pred_vector, actual_vector, energy_cap=2, power_cap=1, n_cy
     return revenue_daa
 
 #%%
-df_revenues = pd.DataFrame(index=df.index, columns=['ica', 'pca', 'naive', 'benchmark'])
+df_revenues = pd.DataFrame(index=df.index, columns=['ica', 'pca', 'arima', 'naive', 'benchmark'])
 ica_revenues = Parallel(n_jobs=-1)(delayed(optimize_one_day)(df_results.iloc[i].values, df.iloc[i].values) for i in tqdm(range(len(df_results))))
 df_revenues['ica'] = ica_revenues
 
 #%%
 pca_revenues = Parallel(n_jobs=-1)(delayed(optimize_one_day)(df_pca_results.iloc[i].values, df.iloc[i].values) for i in tqdm(range(len(df_pca_results))))
 df_revenues['pca'] = pca_revenues
+
+#%%
+arima_revenues = Parallel(n_jobs=-1)(delayed(optimize_one_day)(df_arima_results.iloc[i].values, df.iloc[i].values) for i in tqdm(range(len(df_arima_results))))
+df_revenues['arima'] = arima_revenues
 
 # %%
 naive_revenues = Parallel(n_jobs=-1)(delayed(optimize_one_day)(df_naive.iloc[i].values, df.iloc[i].values) for i in tqdm(range(len(df_naive))))
@@ -83,7 +92,7 @@ plt.title("Total Revenues")
 df_revenues.sum().sort_values().plot.bar(figsize=(8,5), grid=True)
 
 #%%
-yearly_revenues = df_revenues[["benchmark", "ica", "naive", "pca"]].resample("YE").sum()
+yearly_revenues = df_revenues[["benchmark", "ica", "pca", "arima", "naive"]].resample("YE").sum()
 yearly_revenues.plot.bar(figsize=(10,6), grid=True)
 plt.title("Yearly Revenues")
 
@@ -103,6 +112,7 @@ plt.tight_layout()
 
 #%%
 print("ICA vs PCA p-value:", round(mannwhitneyu(df_revenues['ica'], df_revenues['pca'], alternative="greater").pvalue, 4), "relative difference:", round((df_revenues['ica'].sum() - df_revenues['pca'].sum()) / abs(df_revenues['pca'].sum()), 4))
+print("ICA vs ARIMA p-value:", round(mannwhitneyu(df_revenues['ica'], df_revenues['arima'], alternative="greater").pvalue, 4), "relative difference:", round((df_revenues['ica'].sum() - df_revenues['arima'].sum()) / abs(df_revenues['arima'].sum()), 4))
 print("ICA vs Naive p-value:", round(mannwhitneyu(df_revenues['ica'], df_revenues['naive'], alternative="greater").pvalue, 4), "relative difference:", round((df_revenues['ica'].sum() - df_revenues['naive'].sum()) / abs(df_revenues['naive'].sum()), 4))
 print("ICA vs Benchmark p-value:", round(mannwhitneyu(df_revenues['ica'], df_revenues['benchmark'], alternative="greater").pvalue, 4), "relative difference:", round((df_revenues['ica'].sum() - df_revenues['benchmark'].sum()) / abs(df_revenues['benchmark'].sum()), 4))
 

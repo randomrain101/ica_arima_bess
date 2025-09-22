@@ -19,18 +19,21 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
 df_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'predictions.csv'), index_col=0, parse_dates=True)
 df_pca_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'pca_predictions.csv'), index_col=0, parse_dates=True)
+df_arima_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'arima_predictions.csv'), index_col=0, parse_dates=True)
 
 #%%
 df_predicted_returns = (df_results - df.shift(1)).dropna()
 df_pca_predicted_returns = (df_pca_results - df.shift(1)).dropna()
+df_arima_predicted_returns = (df_arima_results - df.shift(1)).dropna()
 df_actual_returns = df.diff().reindex(df_predicted_returns.index)
 naive_predicted_returns = df.shift(1).diff().reindex(df_predicted_returns.index)
 
 #%%
 # Ensure all DataFrames have the same index
-common_index = df_predicted_returns.index.intersection(df_actual_returns.index).intersection(df_pca_predicted_returns.index).intersection(naive_predicted_returns.index)
+common_index = df_predicted_returns.index.intersection(df_actual_returns.index).intersection(df_pca_predicted_returns.index).intersection(df_arima_predicted_returns.index).intersection(naive_predicted_returns.index)
 df_predicted_returns = df_predicted_returns.loc[common_index]
 df_pca_predicted_returns = df_pca_predicted_returns.loc[common_index]
+df_arima_predicted_returns = df_arima_predicted_returns.loc[common_index]
 df_actual_returns = df_actual_returns.loc[common_index]
 naive_predicted_returns = naive_predicted_returns.loc[common_index]
 
@@ -123,13 +126,35 @@ kappa_pca = cohen_kappa_score(actual_direction_pca, pca_direction)
 std_actual_pca = np.std(actual_clean_pca)
 hit_rate_pca = np.mean(np.abs(pca_clean - actual_clean_pca) <= std_actual_pca)
 
-# Create comparison table including PCA
-print("\n" + "="*75)
-print("MODEL vs PCA vs NAIVE COMPARISON")
-print("="*75)
+# Calculate metrics for ARIMA predictions
+arima_returns_flat = df_arima_predicted_returns.values.flatten()
+arima_mask = ~(np.isnan(arima_returns_flat) | np.isnan(actual_returns_flat))
+arima_clean = arima_returns_flat[arima_mask]
+actual_clean_arima = actual_returns_flat[arima_mask]
+
+# ARIMA metrics
+r2_arima = r2_score(actual_clean_arima, arima_clean)
+mae_arima = np.mean(np.abs(arima_clean - actual_clean_arima))
+rmse_arima = root_mean_squared_error(actual_clean_arima, arima_clean)
+medae_arima = median_absolute_error(actual_clean_arima, arima_clean)
+spearman_arima, _ = spearmanr(actual_clean_arima, arima_clean)
+
+arima_direction = np.sign(arima_clean)
+actual_direction_arima = np.sign(actual_clean_arima)
+accuracy_arima = accuracy_score(actual_direction_arima, arima_direction)
+kappa_arima = cohen_kappa_score(actual_direction_arima, arima_direction)
+
+std_actual_arima = np.std(actual_clean_arima)
+hit_rate_arima = np.mean(np.abs(arima_clean - actual_clean_arima) <= std_actual_arima)
+
+# Create comparison table including PCA and ARIMA
+print("\n" + "="*90)
+print("MODEL vs PCA vs ARIMA vs NAIVE COMPARISON")
+print("="*90)
 comparison_metrics = pd.DataFrame({
     'ICA Model': [r2, mae_returns, rmse, mae, accuracy, kappa, hit_rate, spearman_corr],
     'PCA Model': [r2_pca, mae_pca, rmse_pca, medae_pca, accuracy_pca, kappa_pca, hit_rate_pca, spearman_pca],
+    'ARIMA Model': [r2_arima, mae_arima, rmse_arima, medae_arima, accuracy_arima, kappa_arima, hit_rate_arima, spearman_arima],
     'Naive': [r2_naive, mae_naive, rmse_naive, medae_naive, accuracy_naive, kappa_naive, hit_rate_naive, spearman_naive],
 }, index=['R²', 'MAE', 'RMSE', 'Median AE', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate', 'Spearman Corr'])
 
@@ -138,7 +163,7 @@ higher_is_better = ['R²', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate', '
 lower_is_better = ['MAE', 'RMSE', 'Median AE']
 
 # Calculate improvements
-for model in ['ICA Model', 'PCA Model']:
+for model in ['ICA Model', 'PCA Model', 'ARIMA Model']:
     comparison_metrics[f'{model} vs Naive (%)'] = 0.0
     
     for metric in comparison_metrics.index:
@@ -212,6 +237,7 @@ def calculate_quarterly_metrics(predicted_df, actual_df, label):
 quarterly_metrics = []
 quarterly_metrics.extend(calculate_quarterly_metrics(df_predicted_returns, df_actual_returns, 'ICA'))
 quarterly_metrics.extend(calculate_quarterly_metrics(df_pca_predicted_returns, df_actual_returns, 'PCA'))
+quarterly_metrics.extend(calculate_quarterly_metrics(df_arima_predicted_returns, df_actual_returns, 'ARIMA'))
 quarterly_metrics.extend(calculate_quarterly_metrics(naive_predicted_returns, df_actual_returns, 'Naive'))
 
 quarterly_df = pd.DataFrame(quarterly_metrics)
@@ -228,7 +254,7 @@ metrics_to_plot = ['R²', 'MAE', 'RMSE', 'Direction_Accuracy', 'Spearman']
 for i, metric in enumerate(metrics_to_plot):
     ax = axes[i]
     
-    for model in ['ICA', 'PCA', 'Naive']:
+    for model in ['ICA', 'PCA', 'ARIMA', 'Naive']:
         model_data = quarterly_df[quarterly_df['Model'] == model]
         ax.plot(model_data['Quarter'], model_data[metric], marker='o', label=model, linewidth=2)
     
@@ -252,6 +278,7 @@ fig, axes = plt.subplots(2, 2, figsize=(18, 12))
 # Scatter plot comparison
 axes[0,0].scatter(actual_clean, predicted_clean, alpha=0.3, label='ICA', s=5)
 axes[0,0].scatter(actual_clean_pca, pca_clean, alpha=0.3, label='PCA', s=5)
+axes[0,0].scatter(actual_clean_arima, arima_clean, alpha=0.3, label='ARIMA', s=5)
 axes[0,0].scatter(actual_clean_naive, naive_clean, alpha=0.3, label='Naive', s=5)
 axes[0,0].plot([-10, 10], [-10, 10], 'r--', alpha=0.8)
 axes[0,0].set_xlabel('Actual Returns')
@@ -264,14 +291,16 @@ axes[0,0].grid(True)
 metrics_names = ['R²', 'MAE', 'Direction Accuracy', 'Spearman Corr']
 ica_values = [r2, mae_returns, accuracy, spearman_corr]
 pca_values = [r2_pca, mae_pca, accuracy_pca, spearman_pca]
+arima_values = [r2_arima, mae_arima, accuracy_arima, spearman_arima]
 naive_values = [r2_naive, mae_naive, accuracy_naive, spearman_naive]
 
 x = np.arange(len(metrics_names))
-width = 0.25
+width = 0.2
 
-axes[0,1].bar(x - width, ica_values, width, label='ICA', alpha=0.8)
-axes[0,1].bar(x, pca_values, width, label='PCA', alpha=0.8)
-axes[0,1].bar(x + width, naive_values, width, label='Naive', alpha=0.8)
+axes[0,1].bar(x - width*1.5, ica_values, width, label='ICA', alpha=0.8)
+axes[0,1].bar(x - width/2, pca_values, width, label='PCA', alpha=0.8)
+axes[0,1].bar(x + width/2, arima_values, width, label='ARIMA', alpha=0.8)
+axes[0,1].bar(x + width*1.5, naive_values, width, label='Naive', alpha=0.8)
 axes[0,1].set_xlabel('Metrics')
 axes[0,1].set_ylabel('Value')
 axes[0,1].set_title('All Models: Key Metrics Comparison')
@@ -283,10 +312,12 @@ axes[0,1].grid(True, alpha=0.3)
 # Residuals comparison
 ica_residuals = predicted_clean - actual_clean
 pca_residuals = pca_clean - actual_clean_pca
+arima_residuals = arima_clean - actual_clean_arima
 naive_residuals = naive_clean - actual_clean_naive
 
 axes[1,0].hist(ica_residuals, bins=50, alpha=0.6, label='ICA Residuals', density=True)
 axes[1,0].hist(pca_residuals, bins=50, alpha=0.6, label='PCA Residuals', density=True)
+axes[1,0].hist(arima_residuals, bins=50, alpha=0.6, label='ARIMA Residuals', density=True)
 axes[1,0].hist(naive_residuals, bins=50, alpha=0.6, label='Naive Residuals', density=True)
 axes[1,0].set_xlabel('Residuals')
 axes[1,0].set_ylabel('Density')
@@ -300,6 +331,7 @@ improvement_vs_naive = quarterly_pivot.subtract(quarterly_pivot['Naive'], axis=0
 
 axes[1,1].plot(improvement_vs_naive.index, improvement_vs_naive['ICA'], marker='o', label='ICA vs Naive', linewidth=2)
 axes[1,1].plot(improvement_vs_naive.index, improvement_vs_naive['PCA'], marker='s', label='PCA vs Naive', linewidth=2)
+axes[1,1].plot(improvement_vs_naive.index, improvement_vs_naive['ARIMA'], marker='^', label='ARIMA vs Naive', linewidth=2)
 axes[1,1].axhline(y=0, color='red', linestyle='--', alpha=0.7)
 axes[1,1].set_xlabel('Quarter')
 axes[1,1].set_ylabel('R² Improvement vs Naive')
