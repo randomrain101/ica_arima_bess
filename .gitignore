@@ -4,3 +4,4 @@ __pycache__
 notebooks_old
 bess-optimizer
 .vscode
+id3_prices.csv
