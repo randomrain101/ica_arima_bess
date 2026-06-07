@@ -9,80 +9,79 @@ from tqdm import tqdm
 from sklearn.decomposition import FastICA
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, r2_score, cohen_kappa_score, root_mean_squared_error, median_absolute_error, explained_variance_score
-from pmdarima.arima import auto_arima
 from joblib import Parallel, delayed
 from scipy.stats import spearmanr
 import warnings
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 #%%
-df = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
-df_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'predictions.csv'), index_col=0, parse_dates=True)
-df_pca_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'pca_predictions.csv'), index_col=0, parse_dates=True)
-df_arima_results = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'arima_predictions.csv'), index_col=0, parse_dates=True)
+df_prices = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'id3_prices.csv'), index_col=0, parse_dates=True)
+df_ica_predictions = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'predictions.csv'), index_col=0, parse_dates=True)
+df_arima_predictions = pd.read_csv(os.path.join(os.path.dirname(__file__), '..', 'data', 'arima_predictions.csv'), index_col=0, parse_dates=True)
 
 #%%
-df_predicted_returns = (df_results - df.shift(1)).dropna()
-df_pca_predicted_returns = (df_pca_results - df.shift(1)).dropna()
-df_arima_predicted_returns = (df_arima_results - df.shift(1)).dropna()
-df_actual_returns = df.diff().reindex(df_predicted_returns.index)
-naive_predicted_returns = df.shift(1).diff().reindex(df_predicted_returns.index)
+df_ica_predicted_returns = (df_ica_predictions - df_prices.shift(1)).dropna()
+df_arima_predicted_returns = (df_arima_predictions - df_prices.shift(1)).dropna()
+df_actual_returns = df_prices.diff().reindex(df_ica_predicted_returns.index)
+naive_predicted_returns = df_prices.shift(1).diff().reindex(df_ica_predicted_returns.index)
 
 #%%
 # Ensure all DataFrames have the same index
-common_index = df_predicted_returns.index.intersection(df_actual_returns.index).intersection(df_pca_predicted_returns.index).intersection(df_arima_predicted_returns.index).intersection(naive_predicted_returns.index)
-df_predicted_returns = df_predicted_returns.loc[common_index]
-df_pca_predicted_returns = df_pca_predicted_returns.loc[common_index]
+common_index = (df_ica_predicted_returns.index
+                .intersection(df_actual_returns.index)
+                .intersection(df_arima_predicted_returns.index)
+                .intersection(naive_predicted_returns.index))
+df_ica_predicted_returns = df_ica_predicted_returns.loc[common_index]
 df_arima_predicted_returns = df_arima_predicted_returns.loc[common_index]
 df_actual_returns = df_actual_returns.loc[common_index]
 naive_predicted_returns = naive_predicted_returns.loc[common_index]
 
 #%%
 # Flatten the returns DataFrames for metric calculation
-predicted_returns_flat = df_predicted_returns.values.flatten()
+ica_returns_flat = df_ica_predicted_returns.values.flatten()
 actual_returns_flat = df_actual_returns.values.flatten()
 
 # Remove NaN values for metric calculation
-mask = ~(np.isnan(predicted_returns_flat) | np.isnan(actual_returns_flat))
-print("Dropping", np.sum(~mask), "NaN values from the returns data.")
-predicted_clean = predicted_returns_flat[mask]
-actual_clean = actual_returns_flat[mask]
+valid_mask = ~(np.isnan(ica_returns_flat) | np.isnan(actual_returns_flat))
+print("Dropping", np.sum(~valid_mask), "NaN values from the returns data.")
+ica_pred_clean = ica_returns_flat[valid_mask]
+actual_clean_ica = actual_returns_flat[valid_mask]
 
 # Calculate R² score
-r2 = r2_score(actual_clean, predicted_clean)
+r2_ica = r2_score(actual_clean_ica, ica_pred_clean)
 
 # Mean Absolute Error
-mae_returns = np.mean(np.abs(predicted_clean - actual_clean))
-print(f"Mean Absolute Error: {mae_returns:.4f}")
+mae_ica = np.mean(np.abs(ica_pred_clean - actual_clean_ica))
+print(f"Mean Absolute Error: {mae_ica:.4f}")
 
 # For classification metrics, convert returns to directional predictions
-predicted_direction = np.sign(predicted_clean)
-actual_direction = np.sign(actual_clean)
+ica_pred_dir = np.sign(ica_pred_clean)
+actual_dir_ica = np.sign(actual_clean_ica)
 
 # Calculate accuracy
-accuracy = accuracy_score(actual_direction, predicted_direction)
-print(f"Direction Accuracy: {accuracy:.4f}")
+accuracy_ica = accuracy_score(actual_dir_ica, ica_pred_dir)
+print(f"Direction Accuracy: {accuracy_ica:.4f}")
 
 # Calculate Cohen's Kappa
-kappa = cohen_kappa_score(actual_direction, predicted_direction)
-print(f"Cohen's Kappa: {kappa:.4f}")
+kappa_ica = cohen_kappa_score(actual_dir_ica, ica_pred_dir)
+print(f"Cohen's Kappa: {kappa_ica:.4f}")
 
 # Hit Rate (percentage of predictions within 1 standard deviation)
-std_actual = np.std(actual_clean)
-hit_rate = np.mean(np.abs(predicted_clean - actual_clean) <= std_actual)
-print(f"Hit Rate (within 1 std): {hit_rate:.4f}")
+std_actual_ica = np.std(actual_clean_ica)
+hit_rate_ica = np.mean(np.abs(ica_pred_clean - actual_clean_ica) <= std_actual_ica)
+print(f"Hit Rate (within 1 std): {hit_rate_ica:.4f}")
 
 # Calculate RMSE
-rmse = root_mean_squared_error(actual_clean, predicted_clean)
-print(f"RMSE: {rmse:.4f}")
+rmse_ica = root_mean_squared_error(actual_clean_ica, ica_pred_clean)
+print(f"RMSE: {rmse_ica:.4f}")
 
 # Calculate Median Absolute Error
-mae = median_absolute_error(actual_clean, predicted_clean)
-print(f"Median Absolute Error: {mae:.4f}")
+medae_ica = median_absolute_error(actual_clean_ica, ica_pred_clean)
+print(f"Median Absolute Error: {medae_ica:.4f}")
 
 # Calculate Spearman rank correlation coefficient
-spearman_corr, _ = spearmanr(actual_clean, predicted_clean)
-print(f"Spearman Correlation: {spearman_corr:.4f}")
+spearman_ica, _ = spearmanr(actual_clean_ica, ica_pred_clean)
+print(f"Spearman Correlation: {spearman_ica:.4f}")
 
 # Calculate metrics for naive predictions
 naive_returns_flat = naive_predicted_returns.values.flatten()
@@ -105,27 +104,6 @@ kappa_naive = cohen_kappa_score(actual_direction_naive, naive_direction)
 std_actual_naive = np.std(actual_clean_naive)
 hit_rate_naive = np.mean(np.abs(naive_clean - actual_clean_naive) <= std_actual_naive)
 
-# Calculate metrics for PCA predictions
-pca_returns_flat = df_pca_predicted_returns.values.flatten()
-pca_mask = ~(np.isnan(pca_returns_flat) | np.isnan(actual_returns_flat))
-pca_clean = pca_returns_flat[pca_mask]
-actual_clean_pca = actual_returns_flat[pca_mask]
-
-# PCA metrics
-r2_pca = r2_score(actual_clean_pca, pca_clean)
-mae_pca = np.mean(np.abs(pca_clean - actual_clean_pca))
-rmse_pca = root_mean_squared_error(actual_clean_pca, pca_clean)
-medae_pca = median_absolute_error(actual_clean_pca, pca_clean)
-spearman_pca, _ = spearmanr(actual_clean_pca, pca_clean)
-
-pca_direction = np.sign(pca_clean)
-actual_direction_pca = np.sign(actual_clean_pca)
-accuracy_pca = accuracy_score(actual_direction_pca, pca_direction)
-kappa_pca = cohen_kappa_score(actual_direction_pca, pca_direction)
-
-std_actual_pca = np.std(actual_clean_pca)
-hit_rate_pca = np.mean(np.abs(pca_clean - actual_clean_pca) <= std_actual_pca)
-
 # Calculate metrics for ARIMA predictions
 arima_returns_flat = df_arima_predicted_returns.values.flatten()
 arima_mask = ~(np.isnan(arima_returns_flat) | np.isnan(actual_returns_flat))
@@ -147,13 +125,12 @@ kappa_arima = cohen_kappa_score(actual_direction_arima, arima_direction)
 std_actual_arima = np.std(actual_clean_arima)
 hit_rate_arima = np.mean(np.abs(arima_clean - actual_clean_arima) <= std_actual_arima)
 
-# Create comparison table including PCA and ARIMA
+# Create comparison table including ARIMA vs Naive benchmark
 print("\n" + "="*90)
-print("MODEL vs PCA vs ARIMA vs NAIVE COMPARISON")
+print("MODEL vs ARIMA vs NAIVE COMPARISON")
 print("="*90)
 comparison_metrics = pd.DataFrame({
-    'ICA Model': [r2, mae_returns, rmse, mae, accuracy, kappa, hit_rate, spearman_corr],
-    'PCA Model': [r2_pca, mae_pca, rmse_pca, medae_pca, accuracy_pca, kappa_pca, hit_rate_pca, spearman_pca],
+    'ICA Model': [r2_ica, mae_ica, rmse_ica, medae_ica, accuracy_ica, kappa_ica, hit_rate_ica, spearman_ica],
     'ARIMA Model': [r2_arima, mae_arima, rmse_arima, medae_arima, accuracy_arima, kappa_arima, hit_rate_arima, spearman_arima],
     'Naive': [r2_naive, mae_naive, rmse_naive, medae_naive, accuracy_naive, kappa_naive, hit_rate_naive, spearman_naive],
 }, index=['R²', 'MAE', 'RMSE', 'Median AE', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate', 'Spearman Corr'])
@@ -163,7 +140,7 @@ higher_is_better = ['R²', 'Direction Accuracy', 'Cohen\'s Kappa', 'Hit Rate', '
 lower_is_better = ['MAE', 'RMSE', 'Median AE']
 
 # Calculate improvements
-for model in ['ICA Model', 'PCA Model', 'ARIMA Model']:
+for model in ['ICA Model', 'ARIMA Model']:
     comparison_metrics[f'{model} vs Naive (%)'] = 0.0
     
     for metric in comparison_metrics.index:
@@ -180,28 +157,28 @@ for model in ['ICA Model', 'PCA Model', 'ARIMA Model']:
 print(comparison_metrics.round(4))
 
 #%%
-# Quarterly analysis
-def calculate_quarterly_metrics(predicted_df, actual_df, label):
-    """Calculate metrics for quarterly intervals"""
-    quarterly_results = []
+# Yearly analysis
+def calculate_yearly_metrics(predicted_df, actual_df, label):
+    """Calculate metrics for yearly intervals"""
+    yearly_results = []
     
     # Align indices
     common_index = predicted_df.index.intersection(actual_df.index)
     predicted_aligned = predicted_df.loc[common_index]
     actual_aligned = actual_df.loc[common_index]
     
-    # Group by quarters
-    quarters = predicted_aligned.groupby(pd.Grouper(freq='Q'))
+    # Group by years
+    years = predicted_aligned.groupby(pd.Grouper(freq='YE'))
     
-    for quarter_end, quarter_data in quarters:
-        if len(quarter_data) == 0:
+    for year_end, year_data in years:
+        if len(year_data) == 0:
             continue
             
-        quarter_actual = actual_aligned.loc[quarter_data.index]
+        year_actual = actual_aligned.loc[year_data.index]
         
         # Flatten and clean data
-        pred_flat = quarter_data.values.flatten()
-        actual_flat = quarter_actual.values.flatten()
+        pred_flat = year_data.values.flatten()
+        actual_flat = year_actual.values.flatten()
         mask = ~(np.isnan(pred_flat) | np.isnan(actual_flat))
         
         if np.sum(mask) < 10:  # Skip if too few data points
@@ -211,62 +188,58 @@ def calculate_quarterly_metrics(predicted_df, actual_df, label):
         actual_clean = actual_flat[mask]
         
         # Calculate metrics
-        r2_q = r2_score(actual_clean, pred_clean)
-        mae_q = np.mean(np.abs(pred_clean - actual_clean))
-        rmse_q = root_mean_squared_error(actual_clean, pred_clean)
-        spearman_q, _ = spearmanr(actual_clean, pred_clean)
+        r2_y = r2_score(actual_clean, pred_clean)
+        mae_y = np.mean(np.abs(pred_clean - actual_clean))
+        rmse_y = root_mean_squared_error(actual_clean, pred_clean)
+        spearman_y, _ = spearmanr(actual_clean, pred_clean)
         
         pred_dir = np.sign(pred_clean)
         actual_dir = np.sign(actual_clean)
-        accuracy_q = accuracy_score(actual_dir, pred_dir)
+        accuracy_y = accuracy_score(actual_dir, pred_dir)
         
-        quarterly_results.append({
-            'Quarter': quarter_end,
+        yearly_results.append({
+            'Year': year_end,
             'Model': label,
-            'R²': r2_q,
-            'MAE': mae_q,
-            'RMSE': rmse_q,
-            'Direction_Accuracy': accuracy_q,
-            'Spearman': spearman_q,
+            'R²': r2_y,
+            'MAE': mae_y,
+            'RMSE': rmse_y,
+            'Direction_Accuracy': accuracy_y,
+            'Spearman': spearman_y,
             'N_Observations': len(pred_clean)
         })
     
-    return quarterly_results
+    return yearly_results
 
-# Calculate quarterly metrics for all models
-quarterly_metrics = []
-quarterly_metrics.extend(calculate_quarterly_metrics(df_predicted_returns, df_actual_returns, 'ICA'))
-quarterly_metrics.extend(calculate_quarterly_metrics(df_pca_predicted_returns, df_actual_returns, 'PCA'))
-quarterly_metrics.extend(calculate_quarterly_metrics(df_arima_predicted_returns, df_actual_returns, 'ARIMA'))
-quarterly_metrics.extend(calculate_quarterly_metrics(naive_predicted_returns, df_actual_returns, 'Naive'))
+# Calculate yearly metrics for all models
+yearly_metrics = []
+yearly_metrics.extend(calculate_yearly_metrics(df_ica_predicted_returns, df_actual_returns, 'ICA'))
+yearly_metrics.extend(calculate_yearly_metrics(df_arima_predicted_returns, df_actual_returns, 'ARIMA'))
+yearly_metrics.extend(calculate_yearly_metrics(naive_predicted_returns, df_actual_returns, 'Naive'))
 
-quarterly_df = pd.DataFrame(quarterly_metrics)
+yearly_df = pd.DataFrame(yearly_metrics)
 
-print("\nQuarterly Performance:")
-print(quarterly_df.pivot_table(index='Quarter', columns='Model', values=['R²', 'MAE', 'Direction_Accuracy', 'Spearman']).round(4))
+print("\nYearly Performance:")
+print(yearly_df.pivot_table(index='Year', columns='Model', values=['R²', 'MAE', 'Direction_Accuracy', 'Spearman']).round(4))
 
 #%%
-# Plot quarterly progression
-fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+# Plot yearly progression
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
 axes = axes.flatten()
 
-metrics_to_plot = ['R²', 'MAE', 'RMSE', 'Direction_Accuracy', 'Spearman']
+metrics_to_plot = ['R²', 'MAE', 'RMSE', 'Direction_Accuracy']
 for i, metric in enumerate(metrics_to_plot):
     ax = axes[i]
     
-    for model in ['ICA', 'PCA', 'ARIMA', 'Naive']:
-        model_data = quarterly_df[quarterly_df['Model'] == model]
-        ax.plot(model_data['Quarter'], model_data[metric], marker='o', label=model, linewidth=2)
+    for model in ['ICA', 'ARIMA', 'Naive']:
+        model_data = yearly_df[yearly_df['Model'] == model]
+        ax.plot(model_data['Year'], model_data[metric], marker='o', label=model, linewidth=2)
     
-    ax.set_title(f'{metric} by Quarter')
-    ax.set_xlabel('Quarter')
+    ax.set_title(f'{metric} by Year')
+    ax.set_xlabel('Year')
     ax.set_ylabel(metric)
     ax.legend()
     ax.grid(True, alpha=0.3)
     ax.tick_params(axis='x', rotation=45)
-
-# Hide the last subplot if not used
-axes[-1].set_visible(False)
 
 plt.tight_layout()
 plt.show()
@@ -277,7 +250,6 @@ fig, axes = plt.subplots(2, 2, figsize=(18, 12))
 
 # Scatter plot comparison
 axes[0,0].scatter(actual_clean, predicted_clean, alpha=0.3, label='ICA', s=5)
-axes[0,0].scatter(actual_clean_pca, pca_clean, alpha=0.3, label='PCA', s=5)
 axes[0,0].scatter(actual_clean_arima, arima_clean, alpha=0.3, label='ARIMA', s=5)
 axes[0,0].scatter(actual_clean_naive, naive_clean, alpha=0.3, label='Naive', s=5)
 axes[0,0].plot([-10, 10], [-10, 10], 'r--', alpha=0.8)
@@ -290,17 +262,15 @@ axes[0,0].grid(True)
 # Bar chart of key metrics
 metrics_names = ['R²', 'MAE', 'Direction Accuracy', 'Spearman Corr']
 ica_values = [r2, mae_returns, accuracy, spearman_corr]
-pca_values = [r2_pca, mae_pca, accuracy_pca, spearman_pca]
 arima_values = [r2_arima, mae_arima, accuracy_arima, spearman_arima]
 naive_values = [r2_naive, mae_naive, accuracy_naive, spearman_naive]
 
 x = np.arange(len(metrics_names))
-width = 0.2
+width = 0.25
 
-axes[0,1].bar(x - width*1.5, ica_values, width, label='ICA', alpha=0.8)
-axes[0,1].bar(x - width/2, pca_values, width, label='PCA', alpha=0.8)
-axes[0,1].bar(x + width/2, arima_values, width, label='ARIMA', alpha=0.8)
-axes[0,1].bar(x + width*1.5, naive_values, width, label='Naive', alpha=0.8)
+axes[0,1].bar(x - width, ica_values, width, label='ICA', alpha=0.8)
+axes[0,1].bar(x, arima_values, width, label='ARIMA', alpha=0.8)
+axes[0,1].bar(x + width, naive_values, width, label='Naive', alpha=0.8)
 axes[0,1].set_xlabel('Metrics')
 axes[0,1].set_ylabel('Value')
 axes[0,1].set_title('All Models: Key Metrics Comparison')
@@ -311,12 +281,10 @@ axes[0,1].grid(True, alpha=0.3)
 
 # Residuals comparison
 ica_residuals = predicted_clean - actual_clean
-pca_residuals = pca_clean - actual_clean_pca
 arima_residuals = arima_clean - actual_clean_arima
 naive_residuals = naive_clean - actual_clean_naive
 
 axes[1,0].hist(ica_residuals, bins=50, alpha=0.6, label='ICA Residuals', density=True)
-axes[1,0].hist(pca_residuals, bins=50, alpha=0.6, label='PCA Residuals', density=True)
 axes[1,0].hist(arima_residuals, bins=50, alpha=0.6, label='ARIMA Residuals', density=True)
 axes[1,0].hist(naive_residuals, bins=50, alpha=0.6, label='Naive Residuals', density=True)
 axes[1,0].set_xlabel('Residuals')
@@ -325,17 +293,16 @@ axes[1,0].set_title('Residuals Distribution')
 axes[1,0].legend()
 axes[1,0].grid(True, alpha=0.3)
 
-# Performance improvement over time
-quarterly_pivot = quarterly_df.pivot_table(index='Quarter', columns='Model', values='R²')
-improvement_vs_naive = quarterly_pivot.subtract(quarterly_pivot['Naive'], axis=0)
+# Yearly improvement vs naive
+yearly_pivot = yearly_df.pivot_table(index='Year', columns='Model', values='R²')
+improvement_vs_naive = yearly_pivot.subtract(yearly_pivot['Naive'], axis=0)
 
 axes[1,1].plot(improvement_vs_naive.index, improvement_vs_naive['ICA'], marker='o', label='ICA vs Naive', linewidth=2)
-axes[1,1].plot(improvement_vs_naive.index, improvement_vs_naive['PCA'], marker='s', label='PCA vs Naive', linewidth=2)
 axes[1,1].plot(improvement_vs_naive.index, improvement_vs_naive['ARIMA'], marker='^', label='ARIMA vs Naive', linewidth=2)
 axes[1,1].axhline(y=0, color='red', linestyle='--', alpha=0.7)
-axes[1,1].set_xlabel('Quarter')
+axes[1,1].set_xlabel('Year')
 axes[1,1].set_ylabel('R² Improvement vs Naive')
-axes[1,1].set_title('Model Performance Improvement Over Time')
+axes[1,1].set_title('Model Performance Improvement Over Time (vs Naive Benchmark)')
 axes[1,1].legend()
 axes[1,1].grid(True, alpha=0.3)
 axes[1,1].tick_params(axis='x', rotation=45)

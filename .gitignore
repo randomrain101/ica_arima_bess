@@ -1,2 +1,6 @@
 data/*GUI_ENERGY*
 data/id3
+__pycache__
+notebooks_old
+bess-optimizer
+.vscode
