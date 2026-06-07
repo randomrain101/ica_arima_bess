@@ -83,8 +83,7 @@ Capture Rate = revenue as a fraction of perfect-foresight; measures how much of 
 
 ---
 
-## 
-    Key Design Choices
+# Key Design Choices
 
 - Rolling window refit: both ICA and ARIMA models are refit every day on the trailing year of data. This prevents look-ahead bias and adapts to regime changes (e.g., the 2021–2022 energy crisis).
 - Latent-space forecasting: ICA is fit on the full 24-h price vector rather than per-hour, capturing cross-hour structure (price spikes, morning/evening ramps) that per-hour models miss.
